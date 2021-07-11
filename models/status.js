@@ -18,7 +18,7 @@ const Status = sequelize.define("status", {
     allowNull: false,
   },
   position: {
-    type: DataTypes.DOUBLE,
+    type: DataTypes.STRING,
     allowNull: false,
   },
   last_price_buy: {
@@ -28,6 +28,9 @@ const Status = sequelize.define("status", {
   last_price_sell: {
     type: DataTypes.DOUBLE,
     allowNull: false,
+  },
+  bot_id: {
+    type: Sequelize.INTEGER,
   },
 });
 module.exports = Status;
