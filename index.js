@@ -14,7 +14,7 @@ require("dotenv").config();
 const sequelize = setupDatabase();
 const bot_id = 1;
 const SYMBOL = "ETH/USDT";
-const INTERVAL_TECNICAL_DATA = "1m";
+const INTERVAL_TECNICAL_DATA = "5m";
 const OPEN = "OPEN";
 const CLOSED = "CLOSED";
 const SELL = "SELL";
@@ -435,5 +435,5 @@ bot.onText(/\/status/, (msg, match) => {
     )}                                                              
     minusdi: ${dmi[0].result.minusdi.toFixed(
       2
-    )}  dmi_minusdi_average: ${dmi_minusdi_average.toFixed(2)}  
+    )}  dmi_minusdi_average: ${dmi_minusdi_average.toFixed(2)}   
 */
