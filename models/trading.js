@@ -25,5 +25,12 @@ const TradingHistory = sequelize.define("trading_history", {
     type: DataTypes.STRING,
     allowNull: false,
   },
+  createdAt: {
+    type: DataTypes.DATE,
+    allowNull: false,
+  },
+  bot_id: {
+    type: Sequelize.INTEGER,
+  },
 });
 module.exports = TradingHistory;
