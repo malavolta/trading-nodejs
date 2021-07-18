@@ -21,8 +21,8 @@ const SELL = "SELL";
 const BUY = "BUY";
 const RSI_BUY = 25;
 const EXCHANGE_COMMISSION = 0.1; //%
-const TAKE_PROFIT = 0.2 + EXCHANGE_COMMISSION; //%
-const STOP_LOSS = -0.5;
+const TAKE_PROFIT = 0.5 + EXCHANGE_COMMISSION; //%
+const STOP_LOSS = -0.2;
 const client = Binance({
   apiKey: process.env.APIKEY,
   apiSecret: process.env.APISECRET2,
@@ -42,7 +42,8 @@ let status = {
 
 let profit = 0;
 
-let WATCH_RSI_LESS_30 = true;
+let WATCH_MINUSDI_LESS_30 = false;
+let WATCH_RSI_LESS_20 = false;
 
 const getTecnicalData = async function () {
   return new Promise((resolve, reject) => {
@@ -89,7 +90,7 @@ const getTecnicalData = async function () {
   });
 };
 
-cron.schedule("*/1 * * * * *", async () => {
+cron.schedule("*/2 * * * * *", async () => {
   const start = new Date().getTime();
   tecnicalData = await getTecnicalData();
 
@@ -117,23 +118,21 @@ cron.schedule("*/1 * * * * *", async () => {
         .reduce((previus, current) => previus + current) / 10;
     let adx = dmi[0].result.adx.toFixed(2);
     let plusdi = dmi[0].result.plusdi.toFixed(2);
+    let minusdi = dmi[0].result.minusdi.toFixed(2);
     let dmi_adx_average =
       dmi
         .map((dmi) => dmi.result.adx)
         .reduce((previus, current) => previus + current) / 10;
 
-    let dmi_plusdi_average =
-      dmi
-        .map((dmi) => dmi.result.plusdi)
-        .reduce((previus, current) => previus + current) / 10;
+    let dmi_plusdi_average = dmi[9].result.plusdi;
 
     let dmi_minusdi_average =
       dmi
         .map((dmi) => dmi.result.minusdi)
         .reduce((previus, current) => previus + current) / 10;
 
-    if (current_rsi <= RSI_BUY && status.position === CLOSED) {
-      WATCH_RSI_LESS_30 = true;
+    if (current_rsi <= 25 && status.position === CLOSED) {
+      WATCH_RSI_LESS_20 = true;
     }
 
     let indicators = `
@@ -141,28 +140,20 @@ cron.schedule("*/1 * * * * *", async () => {
     price: ${price}  
     price avg: ${avgprice}
     ${avg_current_price}%
-    rsi: ${current_rsi}  
-    sar: ${sar}   type  sar: ${sar_signal} 
-    watch_rsi: ${WATCH_RSI_LESS_30}
+    watch_rsi: ${WATCH_RSI_LESS_20}
     position: ${status.position}
-    plusdi: ${plusdi}dmi_plusdi_average: ${dmi_plusdi_average.toFixed(2)}
-    adx: ${adx} 25 && dmi_adx_average: ${dmi_adx_average.toFixed(2)}
-  `;
+    plusdi: ${plusdi} minusdi: ${minusdi}
+    minusdi <= plusdi: ${minusdi <= plusdi}
+    current_rsi: ${current_rsi}
+ `;
     console.log(indicators);
 
-    if (
-      sar_signal === BUY &&
-      //WATCH_RSI_LESS_30 &&
-      status.position === CLOSED &&
-      plusdi >= 25 &&
-      dmi_plusdi_average <= 30 &&
-      adx >= 25
-    ) {
+    if (WATCH_RSI_LESS_20 && status.position === CLOSED && current_rsi >= 31) {
       status.balance_eth = status.balance_usdt / price;
       status.last_price_buy = price;
       status.position = OPEN;
       profit = 0;
-      WATCH_RSI_LESS_30 = false;
+      WATCH_RSI_LESS_20 = false;
 
       await TradingHistory.create({
         symbol: SYMBOL,
@@ -228,7 +219,7 @@ cron.schedule("*/1 * * * * *", async () => {
       );
     }
     //SELL SELL SELL SELL
-    if (price <= sar && status.position === OPEN && sar_signal === BUY) {
+    if (profit >= TAKE_PROFIT && status.position === OPEN) {
       status.position = CLOSED;
       status.balance_usdt = price * status.balance_eth;
       status.last_price_sell = price;
