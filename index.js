@@ -14,22 +14,22 @@ require("dotenv").config();
 const sequelize = setupDatabase();
 const bot_id = 1;
 const SYMBOL = "ETH/USDT";
-const INTERVAL_TECNICAL_DATA = "5m";
+const INTERVAL_TECNICAL_DATA = "30m";
 const OPEN = "OPEN";
 const CLOSED = "CLOSED";
 const SELL = "SELL";
 const BUY = "BUY";
-const RSI_BUY = 25;
+const RSI_BUY = 26;
 const EXCHANGE_COMMISSION = 0.1; //%
-const TAKE_PROFIT = 0.5 + EXCHANGE_COMMISSION; //%
-const STOP_LOSS = -0.2;
+const TAKE_PROFIT = 0.9 + EXCHANGE_COMMISSION; //%
+const STOP_LOSS = -0.3;
 const client = Binance({
   apiKey: process.env.APIKEY,
   apiSecret: process.env.APISECRET2,
 });
 const ID_CHAT_TELEGRAN = -1001564716717;
 
-const token = "1867998634:AAF2zqiiWV1hspvk48HzvfQvO6CPBFWGJK4";
+const token = "1940484539:AAEKJNvERWwr5EpeUXKGyZ8vgjWqLDWW0Dc";
 const bot = new TelegramBot(token, { polling: true });
 
 let status = {
@@ -49,7 +49,7 @@ const getTecnicalData = async function () {
   return new Promise((resolve, reject) => {
     axios
       .post("https://api.taapi.io/bulk", {
-        secret: process.env.TAAPI_SECRET,
+        secret: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im1hbGF2b2x0YTRAZ21haWwuY29tIiwiaWF0IjoxNjI2MDkyMjU5LCJleHAiOjc5MzMyOTIyNTl9.z_LFPFUpMuRB0SuiJbKXejIG1SMUz8TPVV9aC1jfRMU",
         construct: {
           exchange: "binance",
           symbol: SYMBOL,
@@ -90,11 +90,9 @@ const getTecnicalData = async function () {
   });
 };
 
-cron.schedule("*/2 * * * * *", async () => {
+cron.schedule("*/3 * * * * *", async () => {
   const start = new Date().getTime();
   tecnicalData = await getTecnicalData();
-
-  status.position === OPEN && console.log(`profit: ${profit}%`);
 
   try {
     let dmi = tecnicalData.filter((data) => data.id.match(/dmi.*/));
@@ -130,7 +128,7 @@ cron.schedule("*/2 * * * * *", async () => {
       dmi
         .map((dmi) => dmi.result.minusdi)
         .reduce((previus, current) => previus + current) / 10;
-
+    console.log(current_rsi)
     if (current_rsi <= 25 && status.position === CLOSED) {
       WATCH_RSI_LESS_20 = true;
     }
@@ -146,7 +144,6 @@ cron.schedule("*/2 * * * * *", async () => {
     minusdi <= plusdi: ${minusdi <= plusdi}
     current_rsi: ${current_rsi}
  `;
-    console.log(indicators);
 
     if (WATCH_RSI_LESS_20 && status.position === CLOSED && current_rsi >= 31) {
       status.balance_eth = status.balance_usdt / price;
@@ -183,6 +180,11 @@ cron.schedule("*/2 * * * * *", async () => {
           2
         )}\nPRICE: ${price}\nRSI: ${current_rsi}`
       );
+      console.log(indicators);
+      console.log(
+        `BUY ETH \nAMOUNT: ${status.balance_eth.toFixed(
+          2
+        )}\nPRICE: ${price}\nRSI: ${current_rsi}`)
     }
 
     //STOP LOSS
@@ -190,7 +192,7 @@ cron.schedule("*/2 * * * * *", async () => {
       status.position = CLOSED;
       status.balance_usdt = price * status.balance_eth;
       status.last_price_sell = price;
-      status.position = CLOSED;
+      WATCH_RSI_LESS_20 = false;
       await TradingHistory.create({
         symbol: SYMBOL,
         price: price,
@@ -217,6 +219,9 @@ cron.schedule("*/2 * * * * *", async () => {
         -1001564716717,
         `STOP LOSS ETH\nAMOUNT: ${status.balance_usdt}\nPRICE: ${price}\nPROFIT: ${profit}\nRSI: ${current_rsi}`
       );
+      console.log(indicators);
+      console.log(
+        `STOP LOSS ETH\nAMOUNT: ${status.balance_usdt}\nPRICE: ${price}\nPROFIT: ${profit}\nRSI: ${current_rsi}`)
     }
     //SELL SELL SELL SELL
     if (profit >= TAKE_PROFIT && status.position === OPEN) {
@@ -224,7 +229,7 @@ cron.schedule("*/2 * * * * *", async () => {
       status.balance_usdt = price * status.balance_eth;
       status.last_price_sell = price;
       status.position = CLOSED;
-
+      WATCH_RSI_LESS_20 = false;
       await TradingHistory.create({
         symbol: SYMBOL,
         price: price,
@@ -253,6 +258,9 @@ cron.schedule("*/2 * * * * *", async () => {
         -1001564716717,
         `SELL ETH\nAMOUNT: ${status.balance_usdt}\nPRICE: ${price}\nPROFIT: ${profit}\nRSI: ${current_rsi}`
       );
+      console.log(indicators);
+      console.log(
+        `SELL ETH\nAMOUNT: ${status.balance_usdt}\nPRICE: ${price}\nPROFIT: ${profit}\nRSI: ${current_rsi}`)
     }
   } catch (error) {
     console.error(error);
@@ -407,7 +415,7 @@ bot.onText(/\/profit/, (msg, match) => {
 bot.onText(/\/status/, (msg, match) => {
   const chatId = msg.chat.id;
   const resp = match[1];
-
+  console.log(chatId)
   bot.sendMessage(
     chatId,
     `position: ${status.position}\nbalance usdt ${status.balance_usdt}\nlast price sell = ${status.last_price_sell}
@@ -427,4 +435,8 @@ bot.onText(/\/status/, (msg, match) => {
     minusdi: ${dmi[0].result.minusdi.toFixed(
       2
     )}  dmi_minusdi_average: ${dmi_minusdi_average.toFixed(2)}   
+
+    profit - ganancias en los ultmos 30 dias
+    status - estado actual del bot
+    balance - saldo de la cuenta
 */
