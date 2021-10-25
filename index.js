@@ -17,9 +17,6 @@ const SYMBOL = "ETH/USDT";
 const INTERVAL_TECNICAL_DATA = "15m";
 const OPEN = "OPEN";
 const CLOSED = "CLOSED";
-const SELL = "SELL";
-const BUY = "BUY";
-const RSI_BUY = 26;
 const EXCHANGE_COMMISSION = 0.1; //%
 const TAKE_PROFIT = 0.9 + EXCHANGE_COMMISSION; //%
 const STOP_LOSS = -0.3;
@@ -42,9 +39,10 @@ let status = {
 
 let profit = 0;
 
-let WATCH_MINUSDI_LESS_30 = false;
 let WATCH_RSI_LESS_20 = false;
 
+
+//LLAMADA A LA API PARA OBTENER INDICADORES TECNICOS
 const getTecnicalData = async function () {
   return new Promise((resolve, reject) => {
     axios
@@ -95,56 +93,20 @@ cron.schedule("*/3 * * * * *", async () => {
   tecnicalData = await getTecnicalData();
 
   try {
-    let dmi = tecnicalData.filter((data) => data.id.match(/dmi.*/));
     let rsi = tecnicalData.filter((data) => data.id.match(/rsi.*/));
-    let typprice = tecnicalData.filter((data) => data.id.match(/typprice.*/));
-    let avgprice = tecnicalData
-      .filter((data) => data.id.match(/avgprice.*/))[0]
-      .result.value.toFixed(2);
-
     let price = typprice[0].result.value.toFixed(2);
     profit = (((price - status.last_price_buy) / price) * 100).toFixed(2);
     let avg_current_price = (((price - avgprice) / price) * 100).toFixed(2);
-    let sar_backtrack = tecnicalData.filter((data) => data.id.match(/sar.*/));
     let current_rsi = rsi[0].result.value.toFixed(2);
 
-    let sar = sar_backtrack[0].result.value.toFixed(2);
-    let sar_signal = sar > price ? SELL : BUY;
-    let rsi_average =
-      rsi
-        .map((rsi) => rsi.result.value)
-        .reduce((previus, current) => previus + current) / 10;
-    let adx = dmi[0].result.adx.toFixed(2);
-    let plusdi = dmi[0].result.plusdi.toFixed(2);
-    let minusdi = dmi[0].result.minusdi.toFixed(2);
-    let dmi_adx_average =
-      dmi
-        .map((dmi) => dmi.result.adx)
-        .reduce((previus, current) => previus + current) / 10;
-
-    let dmi_plusdi_average = dmi[9].result.plusdi;
-
-    let dmi_minusdi_average =
-      dmi
-        .map((dmi) => dmi.result.minusdi)
-        .reduce((previus, current) => previus + current) / 10;
     console.log(current_rsi)
+
+    // CAMBIAR VARIABLE A TRUE CUANDO RSI SEA MENOR A 25
     if (current_rsi <= 25 && status.position === CLOSED) {
       WATCH_RSI_LESS_20 = true;
     }
 
-    let indicators = `
-    -----------------------
-    price: ${price}  
-    price avg: ${avgprice}
-    ${avg_current_price}%
-    watch_rsi: ${WATCH_RSI_LESS_20}
-    position: ${status.position}
-    plusdi: ${plusdi} minusdi: ${minusdi}
-    minusdi <= plusdi: ${minusdi <= plusdi}
-    current_rsi: ${current_rsi}
- `;
-
+    // CONDICION PARA COMPRAR RSI DEBIO ESTAR ANTES EN UN VALOR MENOR A 25, POSICION CERRADA, VALOR ACTUAL DE RSI ES MAYOR A 31
     if (WATCH_RSI_LESS_20 && status.position === CLOSED && current_rsi >= 31) {
       status.balance_eth = status.balance_usdt / price;
       status.last_price_buy = price;
@@ -174,6 +136,7 @@ cron.schedule("*/3 * * * * *", async () => {
           },
         }
       );
+
       bot.sendMessage(
         -1001564716717,
         `BUY ETH \nAMOUNT: ${status.balance_eth.toFixed(
@@ -187,7 +150,7 @@ cron.schedule("*/3 * * * * *", async () => {
         )}\nPRICE: ${price}\nRSI: ${current_rsi}`)
     }
 
-    //STOP LOSS
+    //STOP LOSS  VENDER CUANDO LA PERDIDA ES SUPERIOR AL -0.3%
     if (profit <= STOP_LOSS && status.position === OPEN) {
       status.position = CLOSED;
       status.balance_usdt = price * status.balance_eth;
@@ -346,13 +309,6 @@ cron.schedule("*/15 * * * *", async () => {
   }
 });
 
-/*
-balance - actual balance in your account
-profit - profit percentage in especifit x days
-profit_current_position - profit for actual open position
-status - bot status
-*/
-
 bot.onText(/\/balance/, (msg, match) => {
   const chatId = msg.chat.id;
   const resp = match[1];
@@ -366,6 +322,7 @@ bot.onText(/\/profit_current_position/, (msg, match) => {
   }
 });
 bot.onText(/\/profit/, (msg, match) => {
+  //To Do mejorar cuando se buscar el profit y tiene una posicion abierta
   let initial_amount = 2500;
   let chat = match.input.split(" ");
   let profit_days = chat.length > 1 ? chat[1] : 30;
@@ -422,21 +379,3 @@ bot.onText(/\/status/, (msg, match) => {
   `
   );
 });
-
-/*
-    adx: ${adx} dmi_adx_average: ${dmi_adx_average.toFixed(
-      2
-    )}                                                                    
-    plusdi: ${dmi[0].result.plusdi.toFixed(
-      2
-    )}  dmi_plusdi_average: ${dmi_plusdi_average.toFixed(
-      2
-    )}                                                              
-    minusdi: ${dmi[0].result.minusdi.toFixed(
-      2
-    )}  dmi_minusdi_average: ${dmi_minusdi_average.toFixed(2)}   
-
-    profit - ganancias en los ultmos 30 dias
-    status - estado actual del bot
-    balance - saldo de la cuenta
-*/
