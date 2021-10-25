@@ -14,7 +14,7 @@ require("dotenv").config();
 const sequelize = setupDatabase();
 const bot_id = 1;
 const SYMBOL = "ETH/USDT";
-const INTERVAL_TECNICAL_DATA = "30m";
+const INTERVAL_TECNICAL_DATA = "15m";
 const OPEN = "OPEN";
 const CLOSED = "CLOSED";
 const SELL = "SELL";
