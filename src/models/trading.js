@@ -1,9 +1,9 @@
-const { Sequelize, DataTypes } = require("sequelize");
-const setupDatabase = require("../lib/db");
+const { Sequelize, DataTypes } = require('sequelize');
+const setupDatabase = require('../lib/db');
 
 const sequelize = setupDatabase();
 
-const TradingHistory = sequelize.define("trading_history", {
+const TradingHistory = sequelize.define('trading_history', {
   id: {
     type: Sequelize.INTEGER,
     autoIncrement: true,
@@ -33,4 +33,5 @@ const TradingHistory = sequelize.define("trading_history", {
     type: Sequelize.INTEGER,
   },
 });
+
 module.exports = TradingHistory;
