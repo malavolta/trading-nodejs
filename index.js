@@ -1,139 +1,79 @@
-const axios = require('axios');
-const setupDatabase = require('./lib/db');
-const TradingHistory = require('./models/trading');
-const Status = require('./models/status');
-const Binance = require('binance-api-node').default;
-const TelegramBot = require('node-telegram-bot-api');
-const moment = require('moment');
-const cron = require('node-cron');
-// commented by simon
-// const percentile = require('percentile');
-const { tradeHistory, tradeStatus } = require('./src/controllers');
+const axios = require("axios");
+const setupDatabase = require("./src/lib/db");
+const TradingHistory = require("./src/models/trading");
+const Status = require("./src/models/status");
+const Binance = require("binance-api-node").default;
+const TelegramBot = require("node-telegram-bot-api");
+const moment = require("moment");
+const cron = require("node-cron");
+const { tradeHistory, tradeStatus } = require("./src/controllers");
+const getTecnicalData = require("./src/controllers/technicalData/taapi");
 
-require('dotenv').config();
-
-const sequelize = setupDatabase();
+require("dotenv").config();
+console.log(process.env.SQL_HOST);
 const bot_id = 1;
-const SYMBOL = 'ETH/USDT';
-const INTERVAL_TECNICAL_DATA = '15m';
-const OPEN = 'OPEN';
-const CLOSED = 'CLOSED';
-const SELL = 'SELL';
-const BUY = 'BUY';
-const RSI_BUY = 26;
+const SYMBOL = "ETH/USDT";
+const OPEN = "OPEN";
+const CLOSED = "CLOSED";
 const EXCHANGE_COMMISSION = 0.1; //%
 const TAKE_PROFIT = 0.9 + EXCHANGE_COMMISSION; //%
-const STOP_LOSS = -0.3;
-const client = Binance({
-  apiKey: process.env.BINANCE_API_KEY,
-  apiSecret: process.env.BINANCE_API_SECRET,
-});
+const DYNAMIC_STOP_LOSS = -0.3;
+
 const ID_CHAT_TELEGRAN = -1001564716717;
 
-const token = '1940484539:AAEKJNvERWwr5EpeUXKGyZ8vgjWqLDWW0Dc';
+const token = "1940484539:AAGcq64PybEfHHF2vEEHR_JSU3QITFqvl6o";
 const bot = new TelegramBot(token, { polling: true });
 
 let status = {
-  balance_usdt: 2463.241549800494,
-  balance_eth: 0,
+  balance_usdt: 5000,
+  balance_eth: 2,
   position: CLOSED,
   last_price_buy: 0,
   last_price_sell: 0,
 };
 
-let profit = 0;
+let current_profit = 0;
+let higer_profit = 0;
 
 let WATCH_RSI_LESS_20 = false;
 
-
-// commented by simon
-// const getTecnicalData = async function () {
-//   return new Promise((resolve, reject) => {
-//     axios
-//       .post('https://api.taapi.io/bulk', {
-//         secret: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im1hbGF2b2x0YTRAZ21haWwuY29tIiwiaWF0IjoxNjI2MDkyMjU5LCJleHAiOjc5MzMyOTIyNTl9.z_LFPFUpMuRB0SuiJbKXejIG1SMUz8TPVV9aC1jfRMU',
-//         construct: {
-//           exchange: 'binance',
-//           symbol: SYMBOL,
-//           interval: INTERVAL_TECNICAL_DATA,
-//           indicators: [
-//             {
-//               indicator: 'rsi',
-//               backtracks: 5,
-//             },
-//             {
-//               indicator: 'typprice',
-//             },
-//             {
-//               indicator: 'dmi',
-//               backtracks: 10,
-//             },
-//             {
-//               indicator: 'sar',
-//               optInMaximum: '0.02',
-//               //backtracks: 5,
-//             },
-//             {
-//               indicator: 'avgprice',
-//               backtrack: 50,
-//               //backtracks: 5,
-//             },
-//           ],
-//         },
-//       })
-//       .then((response) => {
-//         resolve(response.data.data);
-//         //console.log(response.data.data);
-//       })
-//       .catch((error) => {
-//         console.log(error);
-//         reject(error);
-//       });
-//   });
-// };
-
-cron.schedule('*/3 * * * * *', async () => {
+cron.schedule("*/3 * * * * *", async () => {
   const start = new Date().getTime();
 
   let tecnicalData = await getTecnicalData();
-
+  tecnicalData = tecnicalData.data.data;
+  console.log("RUN");
   try {
     let rsi = tecnicalData.filter((data) => data.id.match(/rsi.*/));
+    let typprice = tecnicalData.filter((data) => data.id.match(/typprice.*/));
     let price = typprice[0].result.value.toFixed(2);
 
-    profit = (((price - status.last_price_buy) / price) * 100).toFixed(2);
-    let avg_current_price = (((price - avgprice) / price) * 100).toFixed(2);
+    current_profit = (((price - status.last_price_buy) / price) * 100).toFixed(
+      2
+    );
     let current_rsi = rsi[0].result.value.toFixed(2);
-
-    let sar = sar_backtrack[0].result.value.toFixed(2);
-
-    console.log(current_rsi);
 
     if (current_rsi <= 25 && status.position === CLOSED) {
       WATCH_RSI_LESS_20 = true;
     }
+
+    if (status.position === OPEN)
+      if (current_profit > higer_profit) higer_profit = current_profit;
 
     // CONDICION PARA COMPRAR RSI DEBIO ESTAR ANTES EN UN VALOR MENOR A 25, POSICION CERRADA, VALOR ACTUAL DE RSI ES MAYOR A 31
     if (WATCH_RSI_LESS_20 && status.position === CLOSED && current_rsi >= 31) {
       status.balance_eth = status.balance_usdt / price;
       status.last_price_buy = price;
       status.position = OPEN;
-      profit = 0;
+      current_profit = 0;
+      higer_profit = 0;
       WATCH_RSI_LESS_20 = false;
 
-      // commented by simon
-      // await TradingHistory.create({
-      //   symbol: SYMBOL,
-      //   price: price,
-      //   amount: status.balance_eth,
-      //   operation: 'BUY',
-      //   bot_id: bot_id,
-      // });
       tradeHistory.create({
         symbol: SYMBOL,
         price: price,
         amount: status.balance_eth,
-        operation: 'BUY',
+        operation: "BUY",
         bot_id: bot_id,
       });
 
@@ -142,56 +82,39 @@ cron.schedule('*/3 * * * * *', async () => {
         balance_eth: status.balance_usdt / price,
         position: OPEN,
         last_price_buy: price,
-        last_price_sell: status.last_price_sell
+        last_price_sell: status.last_price_sell,
       });
-      // commented by simon
-      // await Status.update(
-      //   {
-      //     balance_usdt: status.balance_usdt,
-      //     balance_eth: status.balance_usdt / price,
-      //     position: OPEN,
-      //     last_price_buy: price,
-      //     last_price_sell: status.last_price_sell,
-      //     bot_id: bot_id,
-      //   },
-      //   {
-      //     where: {
-      //       bot_id: bot_id,
-      //     },
-      //   }
-      // );
+
       bot.sendMessage(
         -1001564716717,
         `BUY ETH \nAMOUNT: ${status.balance_eth.toFixed(
           2
         )}\nPRICE: ${price}\nRSI: ${current_rsi}`
       );
-      console.log(indicators);
+
       console.log(
         `BUY ETH \nAMOUNT: ${status.balance_eth.toFixed(
           2
-        )}\nPRICE: ${price}\nRSI: ${current_rsi}`);
+        )}\nPRICE: ${price}\nRSI: ${current_rsi}`
+      );
     }
 
-    //STOP LOSS  VENDER CUANDO LA PERDIDA ES SUPERIOR AL -0.3%
-    if (profit <= STOP_LOSS && status.position === OPEN) {
+    //STOP LOSS  VENDER CUANDO LA PERDIDA ES SUPERIOR AL -0.2%
+    if (
+      current_profit - higer_profit <= DYNAMIC_STOP_LOSS &&
+      status.position === OPEN
+    ) {
       status.position = CLOSED;
       status.balance_usdt = price * status.balance_eth;
       status.last_price_sell = price;
       WATCH_RSI_LESS_20 = false;
-      // commented by simon
-      // await TradingHistory.create({
-      //   symbol: SYMBOL,
-      //   price: price,
-      //   amount: status.balance_eth,
-      //   operation: 'SELL',
-      //   bot_id: bot_id,
-      // });
+      higer_profit = 0;
+
       tradeHistory.create({
         symbol: SYMBOL,
         price: price,
         amount: status.balance_eth,
-        operation: 'SELL',
+        operation: "SELL",
         bot_id: bot_id,
       });
       tradeStatus.update(bot_id, {
@@ -199,53 +122,33 @@ cron.schedule('*/3 * * * * *', async () => {
         balance_eth: status.balance_eth,
         position: CLOSED,
         last_price_buy: status.last_price_buy,
-        last_price_sell: price
+        last_price_sell: price,
       });
-      // commented by simon
-      // await Status.update(
-      //   {
-      //     balance_usdt: price * status.balance_eth,
-      //     balance_eth: status.balance_eth,
-      //     position: CLOSED,
-      //     last_price_buy: status.last_price_buy,
-      //     last_price_sell: price,
-      //     bot_id: bot_id,
-      //   },
-      //   {
-      //     where: {
-      //       bot_id: bot_id,
-      //     },
-      //   }
-      // );
+
       bot.sendMessage(
         -1001564716717,
         `STOP LOSS ETH\nAMOUNT: ${status.balance_usdt}\nPRICE: ${price}\nPROFIT: ${profit}\nRSI: ${current_rsi}`
       );
-      console.log(indicators);
+
       console.log(
-        `STOP LOSS ETH\nAMOUNT: ${status.balance_usdt}\nPRICE: ${price}\nPROFIT: ${profit}\nRSI: ${current_rsi}`);
+        `STOP LOSS ETH\nAMOUNT: ${status.balance_usdt}\nPRICE: ${price}\nPROFIT: ${current_profit}\nRSI: ${current_rsi}`
+      );
     }
 
     //SELL SELL SELL SELL
-    if (profit >= TAKE_PROFIT && status.position === OPEN) {
+    if (current_profit >= TAKE_PROFIT && status.position === OPEN) {
       status.position = CLOSED;
       status.balance_usdt = price * status.balance_eth;
       status.last_price_sell = price;
       status.position = CLOSED;
+      higer_profit = 0;
       WATCH_RSI_LESS_20 = false;
-      // commented by simon
-      // await TradingHistory.create({
-      //   symbol: SYMBOL,
-      //   price: price,
-      //   amount: status.balance_eth,
-      //   operation: 'SELL',
-      //   bot_id: bot_id,
-      // });
+
       tradeHistory.create({
         symbol: SYMBOL,
         price: price,
         amount: status.balance_eth,
-        operation: 'SELL',
+        operation: "SELL",
         bot_id: bot_id,
       });
 
@@ -254,32 +157,17 @@ cron.schedule('*/3 * * * * *', async () => {
         balance_eth: status.balance_eth,
         position: CLOSED,
         last_price_buy: status.last_price_buy,
-        last_price_sell: price
+        last_price_sell: price,
       });
-      // commented by simon
-      // await Status.update(
-      //   {
-      //     balance_usdt: price * status.balance_eth,
-      //     balance_eth: status.balance_eth,
-      //     position: CLOSED,
-      //     last_price_buy: status.last_price_buy,
-      //     last_price_sell: price,
-      //     bot_id: bot_id,
-      //   },
-      //   {
-      //     where: {
-      //       bot_id: bot_id,
-      //     },
-      //   }
-      // );
 
       bot.sendMessage(
         -1001564716717,
         `SELL ETH\nAMOUNT: ${status.balance_usdt}\nPRICE: ${price}\nPROFIT: ${profit}\nRSI: ${current_rsi}`
       );
-      console.log(indicators);
+
       console.log(
-        `SELL ETH\nAMOUNT: ${status.balance_usdt}\nPRICE: ${price}\nPROFIT: ${profit}\nRSI: ${current_rsi}`);
+        `SELL ETH\nAMOUNT: ${status.balance_usdt}\nPRICE: ${price}\nPROFIT: ${current_profit}\nRSI: ${current_rsi}`
+      );
     }
   } catch (error) {
     console.error(error);
@@ -293,49 +181,34 @@ const startApp = async function () {
     const sequelize = setupDatabase();
 
     await sequelize.authenticate();
+    // sequelize.sync({ force: false }).then(() => {
+    //   TradingHistory.bulkCreate([
+    //     {
+    //       symbol: "ETH/USDT",
+    //       price: 2.4,
+    //       amount: 1,
+    //       operation: "BUY",
+    //       bot_id: -1,
+    //     },
+    //   ]);
 
-    /*     sequelize.sync({ force: false }).then(() => {
-  TradingHistory.bulkCreate([
-    {
-      symbol: "ETH/USDT",
-      price: 2.4,
-      amount: 1,
-      operation: "BUY",
-      bot_id: -1,
-    },
-    {
-      symbol: "ETH/USDT",
-      price: 2.5,
-      amount: 1,
-      operation: "BUY",
-      bot_id: -1,
-    },
-    {
-      symbol: "ETH/USDT",
-      price: 2.8,
-      amount: 1,
-      operation: "BUY",
-      bot_id: -1,
-    },
-  ]);
-
-  Status.update(
-    {
-      balance_usdt: status.balance_usdt,
-      balance_eth: status.balance_eth,
-      position: status.position,
-      last_price_buy: status.last_price_buy,
-      last_price_sell: status.last_price_sell,
-      bot_id: bot_id,
-    },
-    {
-      where: {
-        id: 1,
-        bot_id: bot_id,
-      },
-    }
-  );
-}); */
+    //   Status.update(
+    //     {
+    //       balance_usdt: status.balance_usdt,
+    //       balance_eth: status.balance_eth,
+    //       position: status.position,
+    //       last_price_buy: status.last_price_buy,
+    //       last_price_sell: status.last_price_sell,
+    //       bot_id: bot_id,
+    //     },
+    //     {
+    //       where: {
+    //         id: 1,
+    //         bot_id: bot_id,
+    //       },
+    //     }
+    //   );
+    // });
 
     // commented by simon
     // Status.findAll({
@@ -352,21 +225,21 @@ const startApp = async function () {
     //     console.log(err);
     //   });
     //CHECK: why is looking for the first status?
-    status = tradeStatus.findStatus(bot_id);
-    console.log('Connection has been established successfully.');
+    //status = tradeStatus.findStatus(bot_id);
+    console.log("Connection has been established successfully.");
   } catch (error) {
-    console.error('Unable to connect to the database:', error);
+    console.error("Unable to connect to the database:", error);
   }
 };
 
 startApp();
 
-cron.schedule('*/15 * * * *', async () => {
+cron.schedule("*/15 * * * *", async () => {
   if (status.position === OPEN) {
-    bot.sendMessage(
-      ID_CHAT_TELEGRAN,
-      `OPEN POSITION\n\nOPENING PRICE: ${status.last_price_buy}\nACTUAL PROFIT: ${profit}%`
-    );
+    // bot.sendMessage(
+    //   ID_CHAT_TELEGRAN,
+    //   `OPEN POSITION\n\nOPENING PRICE: ${status.last_price_buy}\nACTUAL PROFIT: ${current_profit}%`
+    // );
   }
 });
 
@@ -378,27 +251,27 @@ bot.onText(/\/balance/, (msg, match) => {
 });
 bot.onText(/\/profit_current_position/, (msg, match) => {
   if (status.position === OPEN) {
-    bot.sendMessage(msg.chat.id, `current position ${profit}% `);
+    bot.sendMessage(msg.chat.id, `current position ${current_profit}% `);
   } else {
-    bot.sendMessage(msg.chat.id, 'you don\'t have open position');
+    bot.sendMessage(msg.chat.id, "you don't have open position");
   }
 });
 bot.onText(/\/profit/, (msg, match) => {
   //To Do mejorar cuando se buscar el profit y tiene una posicion abierta
   let initial_amount = 2500;
-  let chat = match.input.split(' ');
+  let chat = match.input.split(" ");
   let profit_days = chat.length > 1 ? chat[1] : 30;
 
   if (status.position === OPEN) {
-    bot.sendMessage(msg.chat.id, `current position ${profit}% `);
+    bot.sendMessage(msg.chat.id, `current position ${current_profit}% `);
   } else {
-    bot.sendMessage(msg.chat.id, 'you don\'t have open position');
+    bot.sendMessage(msg.chat.id, "you don't have open position");
   }
 
   TradingHistory.findAll({
     where: {
       createdAt: {
-        [Op.gt]: moment().subtract(profit_days, 'days').toDate(),
+        [Op.gt]: moment().subtract(profit_days, "days").toDate(),
       },
       bot_id: bot_id,
     },
@@ -443,21 +316,3 @@ bot.onText(/\/status/, (msg, match) => {
   `
   );
 });
-
-/*
-    adx: ${adx} dmi_adx_average: ${dmi_adx_average.toFixed(
-      2
-    )}
-    plusdi: ${dmi[0].result.plusdi.toFixed(
-      2
-    )}  dmi_plusdi_average: ${dmi_plusdi_average.toFixed(
-      2
-    )}
-    minusdi: ${dmi[0].result.minusdi.toFixed(
-      2
-    )}  dmi_minusdi_average: ${dmi_minusdi_average.toFixed(2)}
-
-    profit - ganancias en los ultmos 30 dias
-    status - estado actual del bot
-    balance - saldo de la cuenta
-*/

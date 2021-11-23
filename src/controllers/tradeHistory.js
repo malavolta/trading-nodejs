@@ -1,13 +1,7 @@
-const { TradingHistory } = require('../models/trading');
+const { TradingHistory } = require("../models/trading");
 
 module.exports = {
-  create: async ({
-    symbol,
-    price,
-    amount,
-    operation,
-    bot_id,
-  }) => {
+  create: async ({ symbol, price, amount, operation, bot_id }) => {
     //TODO: send this to a queue
     await TradingHistory.create({
       symbol,
@@ -16,5 +10,5 @@ module.exports = {
       operation,
       bot_id,
     });
-  }
+  },
 };

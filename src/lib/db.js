@@ -1,14 +1,12 @@
-'use strict';
-
-const Sequelize = require('sequelize');
+"use strict";
+const Sequelize = require("sequelize");
 let sequelize = null;
 
-module.exports = () => {
+module.exports = function setupDatabase() {
   if (!sequelize) {
     sequelize = new Sequelize(
-      process.env.SQL_HOST
+      "postgres://ndjxqepu:z08mETdzGqrASiYbJ1cubgxI5GxThrPg@batyr.db.elephantsql.com/ndjxqepu"
     );
   }
-
   return sequelize;
 };
